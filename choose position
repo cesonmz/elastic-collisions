@@ -1,0 +1,101 @@
+import sys
+import threading
+import numpy as np
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton
+from vpython import *
+
+# Установка сцены
+scene = canvas(title="Oblique Elastic Collision", width=800, height=600, center=vector(0, 0, 0), background=color.white)
+size = 30
+
+# Стены
+left_wall = box(pos=vector(-size, 0, 0), size=vector(0.1, 2 * size, 0), color=color.blue)
+right_wall = box(pos=vector(size, 0, 0), size=vector(0.1, 2 * size, 0), color=color.blue)
+top_wall = box(pos=vector(0, size, 0), size=vector(2 * size, 0.1, 0), color=color.blue)
+bottom_wall = box(pos=vector(0, -size, 0), size=vector(2 * size, 0.1, 0), color=color.blue)
+
+# Глобальные переменные для параметров
+m1_value = 1
+r1_value = 1
+pos1_value = None  # Положение первого шара будет выбрано пользователем
+vel1_value = vector(3, 0, 0)
+
+m2_value = 1
+r2_value = 1
+pos2_value = None  # Положение второго шара будет выбрано пользователем
+vel2_value = vector(-3, 0, 0)
+
+# Состояние выбора шара
+current_ball = 1  # Сначала выбираем первый шар
+
+
+def choose_position(evt):
+    global pos1_value, pos2_value, current_ball, ball1, ball2
+
+    if current_ball == 1:
+        pos1_value = evt.pos
+        ball1 = sphere(pos=pos1_value, radius=r1_value, color=color.red, make_trail=True)
+        print(f"Первый шар размещён на позиции: {pos1_value}")
+        current_ball = 2  # Переходим к выбору второго шара
+    elif current_ball == 2:
+        pos2_value = evt.pos
+        ball2 = sphere(pos=pos2_value, radius=r2_value, color=color.blue, make_trail=True)
+        print(f"Второй шар размещён на позиции: {pos2_value}")
+        # Отключаем возможность выбора после размещения второго шара
+        scene.unbind('click', choose_position)
+        start_simulation()  # Запускаем симуляцию
+
+
+def start_simulation():
+    global ball1, ball2, ball3, v_cm
+
+    # Установка начальных скоростей
+    ball1.velocity = vel1_value
+    ball2.velocity = vel2_value
+
+    # Центр масс
+    x_cm = (m1_value * ball1.pos + m2_value * ball2.pos) / (m1_value + m2_value)
+    ball3 = sphere(pos=x_cm, radius=0.1, color=color.green, make_trail=True)
+
+    # Скорость центра масс
+    global v_cm
+    v_cm = (m1_value * ball1.velocity + m2_value * ball2.velocity) / (m1_value + m2_value)
+
+    dt = 0.01
+    t = 0
+    while t < 70:
+        rate(400)
+        ball1.pos += ball1.velocity * dt
+        ball2.pos += ball2.velocity * dt
+        ball3.pos += v_cm * dt
+
+        # Проверка на столкновение
+        if mag(ball1.pos - ball2.pos) <= (ball1.radius + ball2.radius):
+            ball1.velocity, ball2.velocity = new_velocity(ball1.velocity, ball2.velocity, m1_value, m2_value)
+
+        # Проверка столкновения с границами для ball1
+        if ball1.pos.x + ball1.radius >= size or ball1.pos.x - ball1.radius <= -size:
+            ball1.velocity.x = -ball1.velocity.x
+        if ball1.pos.y + ball1.radius >= size or ball1.pos.y - ball1.radius <= -size:
+            ball1.velocity.y = -ball1.velocity.y
+
+        # Проверка столкновения с границами для ball2
+        if ball2.pos.x + ball2.radius >= size or ball2.pos.x - ball2.radius <= -size:
+            ball2.velocity.x = -ball2.velocity.x
+        if ball2.pos.y + ball2.radius >= size or ball2.pos.y - ball2.radius <= -size:
+            ball2.velocity.y = -ball2.velocity.y
+
+        t += dt
+
+
+def new_velocity(vel1, vel2, m1, m2):
+    v1_new = (m1 - m2) / (m1 + m2) * vel1 + 2 * m2 * vel2 / (m1 + m2)
+    v2_new = 2 * m1 * vel1 / (m1 + m2) + (m2 - m1) / (m1 + m2) * vel2
+    return v1_new, v2_new
+
+
+if __name__ == '__main__':
+    scene.bind('click', choose_position)  # Связываем клики мыши с выбором позиции
+    scene.append_to_caption("\nClick to set the positions of the balls.\n")
+    app = QApplication(sys.argv)
+    sys.exit(app.exec_())
