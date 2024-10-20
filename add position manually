@@ -1,0 +1,196 @@
+import sys
+import threading
+import numpy as np
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton)
+from vpython import *
+
+scene = canvas(title="Oblique Elastic Collision", width=800, height=600, center=vector(0, 0, 0), background=color.white)
+size = 30
+
+left_wall = box(pos=vector(-size, 0, 0), size=vector(0.1, 2 * size, 0), color=color.blue)
+right_wall = box(pos=vector(size, 0, 0), size=vector(0.1, 2 * size, 0), color=color.blue)
+top_wall = box(pos=vector(0, size, 0), size=vector(2 * size, 0.1, 0), color=color.blue)
+bottom_wall = box(pos=vector(0, -size, 0), size=vector(2 * size, 0.1, 0), color=color.blue)
+
+m1_value = 1
+r1_value = 1
+pos1_value = vector(-10, 0, 0)
+vel1_value = vector(3, 0, 0)
+
+m2_value = 1
+r2_value = 1
+pos2_value = vector(10, 0, 0)
+vel2_value = vector(-3, 0, 0)
+
+
+
+class InputWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+        self.setGeometry(100, 100, 450, 350)
+
+    def initUI(self):
+        self.setWindowTitle('Elastic Collision Simulation!')
+
+
+        self.mass1_label = QLabel('Mass 1: ')
+        self.mass1_input = QLineEdit()
+        self.radius1_label = QLabel('Radius 1: ')
+        self.radius1_input = QLineEdit()
+        self.position1_label = QLabel('Position 1 (x, y): ')
+        self.position1_input = QLineEdit()
+        self.velocity1_label = QLabel('Velocity (vx, vy): ')
+        self.velocity1_input = QLineEdit()
+
+
+        self.mass2_label = QLabel('Mass 2: ')
+        self.mass2_input = QLineEdit()
+        self.radius2_label = QLabel('Radius 2: ')
+        self.radius2_input = QLineEdit()
+        self.position2_label = QLabel('Position 2 (x, y): ')
+        self.position2_input = QLineEdit()
+        self.velocity2_label = QLabel('Velocity 2 (vx, vy): ')
+        self.velocity2_input = QLineEdit()
+
+
+        self.start_button = QPushButton('Start')
+        self.start_button.clicked.connect(self.start_simulation)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.mass1_label)
+        layout.addWidget(self.mass1_input)
+        layout.addWidget(self.radius1_label)
+        layout.addWidget(self.radius1_input)
+        layout.addWidget(self.position1_label)
+        layout.addWidget(self.position1_input)
+        layout.addWidget(self.velocity1_label)
+        layout.addWidget(self.velocity1_input)
+
+        layout.addWidget(self.mass2_label)
+        layout.addWidget(self.mass2_input)
+        layout.addWidget(self.radius2_label)
+        layout.addWidget(self.radius2_input)
+        layout.addWidget(self.position2_label)
+        layout.addWidget(self.position2_input)
+        layout.addWidget(self.velocity2_label)
+        layout.addWidget(self.velocity2_input)
+
+        layout.addWidget(self.start_button)
+        self.setLayout(layout)
+
+    def parse_position(self, position_input):
+        x, y = map(float, position_input.strip('[]').split(','))
+        return vector(x, y, 0)
+
+    def parse_velocity(self, velocity_input):
+        vx, vy = map(float, velocity_input.strip('[]').split(','))
+        return vector(vx, vy, 0)
+
+    def start_simulation(self):
+        global m1_value, r1_value, pos1_value, vel1_value
+        global m2_value, r2_value, pos2_value, vel2_value
+
+        m1_value = float(self.mass1_input.text())
+        r1_value = float(self.radius1_input.text())
+        pos1_value = self.parse_position(self.position1_input.text())
+        vel1_value = self.parse_velocity(self.velocity1_input.text())
+
+        m2_value = float(self.mass2_input.text())
+        r2_value = float(self.radius2_input.text())
+        pos2_value = self.parse_position(self.position2_input.text())
+        vel2_value = self.parse_velocity(self.velocity2_input.text())
+
+        threading.Thread(target=self.animate).start()
+
+    def animate(self):
+        global ball1, ball2, ball3, v_cm
+        ball1 = sphere(pos=pos1_value, radius=r1_value, color=color.red, make_trail=True)
+        ball2 = sphere(pos=pos2_value, radius=r2_value, color=color.blue, make_trail=True)
+
+
+        ball1.velocity = vel1_value
+        ball2.velocity = vel2_value
+
+
+        x_cm = (m1_value * ball1.pos + m2_value * ball2.pos) / (m1_value + m2_value)
+        ball3 = sphere(pos=x_cm, radius=0.1, color=color.green, make_trail=True)
+
+
+        global v_cm
+        v_cm = (m1_value * ball1.velocity + m2_value * ball2.velocity) / (m1_value + m2_value)
+
+
+        ke1_label = label(pos=vector(-size, size - 1, 0), text='KE1: 0', height=12, box=False)
+        ke2_label = label(pos=vector(-size, size - 2, 0), text='KE2: 0', height=12, box=False)
+        ke_total_label = label(pos=vector(-size, size - 3, 0), text='Total KE: 0', height=12, box=False)
+
+
+        energy_graph = graph(title='Kinetic Energy vs Time', xtitle='Time (s)', ytitle='Kinetic Energy (J)', width=400,
+                             height=300)
+        ke1_curve = gcurve(color=color.red, label='KE1')
+        ke2_curve = gcurve(color=color.blue, label='KE2')
+        ke_total_curve = gcurve(color=color.green, label='Total KE')
+
+        dt = 0.01
+        t = 0
+
+        while t < 70:
+            rate(400)
+            ball1.pos += ball1.velocity * dt
+            ball2.pos += ball2.velocity * dt
+            ball3.pos += v_cm * dt
+
+
+            if mag(ball1.pos - ball2.pos) <= (ball1.radius + ball2.radius):
+                ball1.velocity, ball2.velocity = new_velocity(ball1.velocity, ball2.velocity, m1_value, m2_value)
+
+
+                angle = angle_between(ball1.velocity, ball2.velocity)
+                print(f"Angle of deflection: {np.degrees(angle):.2f} degrees")
+
+
+            if ball1.pos.x + ball1.radius >= size or ball1.pos.x - ball1.radius <= -size:
+                ball1.velocity.x = -ball1.velocity.x
+            if ball1.pos.y + ball1.radius >= size or ball1.pos.y - ball1.radius <= -size:
+                ball1.velocity.y = -ball1.velocity.y
+
+
+            if ball2.pos.x + ball2.radius >= size or ball2.pos.x - ball2.radius <= -size:
+                ball2.velocity.x = -ball2.velocity.x
+            if ball2.pos.y + ball2.radius >= size or ball2.pos.y - ball2.radius <= -size:
+                ball2.velocity.y = -ball2.velocity.y
+
+
+            ke1 = 0.5 * m1_value * mag(ball1.velocity) ** 2
+            ke2 = 0.5 * m2_value * mag(ball2.velocity) ** 2
+            total_ke = ke1 + ke2
+
+
+            ke1_label.text = f'KE1: {ke1:.2f}'
+            ke2_label.text = f'KE2: {ke2:.2f}'
+            ke_total_label.text = f'Total KE: {total_ke:.2f}'
+
+
+            ke1_curve.plot(t, ke1)
+            ke2_curve.plot(t, ke2)
+            ke_total_curve.plot(t, total_ke)
+
+            t += dt
+
+
+def new_velocity(vel1, vel2, m1, m2):
+    v1_new = (m1 - m2) / (m1 + m2) * vel1 + 2 * m2 * vel2 / (m1 + m2)
+    v2_new = 2 * m1 * vel1 / (m1 + m2) + (m2 - m1) / (m1 + m2) * vel2
+    return v1_new, v2_new
+
+def angle_between(v1, v2):
+    dot_product = dot(v1, v2)
+    angle = np.arccos(dot_product/(mag(v1) * mag(v2)))
+    return angle
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = InputWindow()
+    window.show()
+    sys.exit(app.exec_())
